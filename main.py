@@ -1669,10 +1669,10 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 # ====================== MAIN ENTRY POINT ======================
 def main():
-    """Main entry point optimized for Koyeb"""
+    """Main entry point optimized for Render"""
     try:
-        # Koyeb-specific port handling
-        port = int(os.environ.get('PORT', 8080))
+        # Render-specific port handling (Render uses port 10000)
+        port = int(os.environ.get('PORT', 10000))
         
         # Force paper trading for safety on cloud deployment
         os.environ['USE_REALISTIC_PAPER'] = 'true'
@@ -1681,7 +1681,7 @@ def main():
         setup_logging()
         logger = logging.getLogger(__name__)
         
-        logger.info("🚀 Starting on Koyeb deployment")
+        logger.info("🚀 Starting on Render deployment")
 
         use_realistic_paper = True  # Force paper trading on cloud
         logger.info("📝 REALISTIC PAPER TRADING MODE - Real market data, simulated trades")
@@ -1696,7 +1696,7 @@ def main():
         logger.info(f"⚡ Leverage: {Config.LEVERAGE}x")
         logger.info(f"🎯 Max Positions: {Config.MAX_POSITIONS}")
         logger.info(f"💰 Base Risk: {Config.BASE_RISK_PERCENT}% per trade")
-        logger.info(f"🔄 Mode: REALISTIC PAPER TRADING (Cloud Deployment)")
+        logger.info(f"🔄 Mode: REALISTIC PAPER TRADING (Render Deployment)")
 
         # Initialize trading bot with forced paper trading
         bot = TradingBot(use_realistic_paper=True)
@@ -1711,7 +1711,7 @@ def main():
         server.start_time = time.time()
 
         logger.info(f"🌐 Health server running on port {port}")
-        logger.info("✅ Bot is now running with REAL market data on Koyeb. Press Ctrl+C to stop.")
+        logger.info("✅ Bot is now running with REAL market data on Render")
         logger.info(f"🔗 Health endpoint available at: http://0.0.0.0:{port}/")
 
         # Keep the main thread alive
@@ -1726,7 +1726,6 @@ def main():
 
     except Exception as e:
         print(f"💥 Fatal startup error: {e}")
-        logger.error(f"💥 Fatal startup error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
