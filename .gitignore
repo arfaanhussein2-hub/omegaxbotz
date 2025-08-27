@@ -1,5 +1,8 @@
-# Environment variables
+# Environment Variables (CRITICAL - Never commit secrets)
 .env
+.env.local
+.env.*.local
+*.env
 
 # Python
 __pycache__/
@@ -19,25 +22,227 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Database
+# Virtual Environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+pyvenv.cfg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# celery beat schedule file
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# Trading Bot Specific Files
 *.db
 *.sqlite
 *.sqlite3
-
-# Logs
-*.log
 logs/
+log/
+data/
+backups/
+trades.csv
+positions.csv
+performance.json
+bot_state.json
 
-# IDE
+# API Keys and Secrets (CRITICAL)
+config.json
+secrets.json
+api_keys.txt
+credentials.txt
+*.key
+*.pem
+*.p12
+*.pfx
+
+# IDE and Editor Files
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.sublime-project
+.sublime-workspace
 
-# OS
+# OS Generated Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
+
+# Windows
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+
+# Compressed Files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Docker
+.dockerignore
+Dockerfile.dev
+docker-compose.override.yml
+
+# Cloud Platform Files
+.vercel
+.netlify
+.railway
+
+# Local Development
+local_settings.py
+dev_config.py
+test_config.py
+
+# Binance API Related (if any)
+binance_keys.json
+api_credentials.json
+
+# Telegram Bot Related (if any)
+telegram_config.json
+bot_credentials.json
+
+# Trading Data (sensitive)
+portfolio.json
+trading_history.csv
+account_balance.json
+positions_data.json
+
+# Machine Learning Models (if any)
+*.pkl
+*.joblib
+*.h5
+*.model
+
+# Jupyter/Research Files
+*.ipynb
+research/
+experiments/
+
+# Documentation Build
+docs/_build/
+docs/build/
+
+# Local Configuration
+local.py
+local_config.py
+development.py
