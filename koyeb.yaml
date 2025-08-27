@@ -1,0 +1,17 @@
+name: omegax-trading-bot
+services:
+  - name: trading-bot
+    type: web
+    build:
+      type: buildpack
+    env:
+      - name: USE_REALISTIC_PAPER
+        value: "true"
+      - name: PORT
+        value: "8080"
+    ports:
+      - port: 8080
+        protocol: http
+    regions:
+      - fra
+    instance_type: nano
