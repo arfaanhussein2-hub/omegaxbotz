@@ -1506,6 +1506,16 @@ class TradingBot:
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'omegax-secret-key-2024')
 
+@app.route('/ping', methods=['GET', 'HEAD'])
+def ping():
+    # Simple health check endpoint (used by Render)
+    return 'pong', 200
+
+@app.route('/favicon.ico')
+def favicon():
+    # Avoid noisy 404s in logs when browsers request favicon
+    return ('', 204)
+
 # HTML Template for Web UI
 DASHBOARD_HTML = """
 <!DOCTYPE html>
