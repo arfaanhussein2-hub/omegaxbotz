@@ -1,20 +1,59 @@
-echo services:
+services:
   - type: web
-    name: omegax-bot
+    name: omegax-trading-bot
     env: python
-    plan: starter
-    runtime: python-3.11.6
-    buildCommand: |
-      python -m pip install --upgrade pip==23.3.1
-      pip install setuptools==68.2.2 wheel==0.41.3
-      pip install -r requirements.txt
+    runtime: python-3.9
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: python main.py
+    plan: starter
+    
+    # Environment Variables
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.6
+        value: "3.9"
+      - key: PORT
+        value: 8080
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
       - key: WEB_UI_PASSWORD
-        value: omegax2024
+        value: omegax2024!
+      - key: BINANCE_API_KEY
+        value: ""
+      - key: BINANCE_SECRET_KEY
+        value: ""
+      - key: BINANCE_TESTNET
+        value: "false"
+      - key: TELEGRAM_TOKEN
+        value: ""
+      - key: TELEGRAM_CHAT_ID
+        value: ""
+      - key: LOG_LEVEL
+        value: INFO
+      - key: UPDATE_INTERVAL
+        value: "30"
+      - key: REPORT_INTERVAL
+        value: "600"
+      - key: MAX_POSITIONS
+        value: "12"
+      - key: LEVERAGE
+        value: "10"
+      - key: BASE_RISK_PERCENT
+        value: "0.8"
+      - key: INITIAL_BALANCE
+        value: "1000.00"
       - key: USE_REALISTIC_PAPER
-        value: true
+        value: "true"
+    
+    # Health Check
     healthCheckPath: /ping
-    autoDeploy: true > render.yaml
+    
+    # Disk for database persistence
+    disk:
+      name: omegax-db
+      mountPath: /opt/render/project/src
+      sizeGB: 1
+    
+    # Auto-deploy on push
+    autoDeploy: true
