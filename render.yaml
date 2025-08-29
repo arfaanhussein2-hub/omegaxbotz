@@ -2,12 +2,26 @@ services:
   - type: web
     name: omegax-trading-bot
     env: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    plan: starter
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install --no-cache-dir -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 main:app
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.6
+      - key: WEB_UI_PASSWORD
+        generateValue: true
       - key: USE_REALISTIC_PAPER
-        value: "true"
-      - key: PORT
-        value: "10000"
-    healthCheckPath: /
+        value: true
+      - key: INITIAL_BALANCE
+        value: "1000"
+      - key: LEVERAGE
+        value: "10"
+      - key: MAX_POSITIONS
+        value: "12"
+      - key: LOG_LEVEL
+        value: INFO
+    
+    healthCheckPath: /ping
+    autoDeploy: true
