@@ -3,9 +3,13 @@ services:
     name: omegax-bot
     env: python
     plan: starter
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      python -m pip install --upgrade pip setuptools wheel
+      pip install -r requirements.txt
     startCommand: python main.py
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.6
       - key: WEB_UI_PASSWORD
         value: omegax2024
       - key: USE_REALISTIC_PAPER
