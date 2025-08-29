@@ -643,17 +643,11 @@ class RealisticPaperTradingClient:
         self.logger.info("✅ Enhanced paper trading client initialized")
 
     def _validate_response(self, data: Any) -> bool:
-    """Lenient response validation for Render deployment"""
-    if data is None:
-        return False
-    
-    if isinstance(data, dict):
-        return 'code' not in data  # Accept empty dict, reject only errors
-        
-    if isinstance(data, list):
-        return True  # Accept any list
-        
-    return True  # Accept other valid JSON
+        """FIXED: Lenient response validation for deployment"""
+        if data is None:
+            return False
+        # Simple fix - just reject error responses, accept everything else including empty responses
+        return 'code' not in str(data)
 
     def _request(self, method: str, endpoint: str, params: Dict = None, weight: int = 1, retries: int = 3) -> Dict:
         """Enhanced API request with comprehensive error handling"""
@@ -686,7 +680,7 @@ class RealisticPaperTradingClient:
                 except json.JSONDecodeError as e:
                     raise ValueError(f"Invalid JSON response: {e}")
 
-                # Validate response structure
+                # Validate response structure (FIXED)
                 if not self._validate_response(result):
                     raise ValueError("Invalid response structure")
 
@@ -1036,9 +1030,6 @@ class RealisticPaperTradingClient:
         try:
             # Test ping
             ping_result = self._request('GET', '/fapi/v1/ping')
-            if ping_result is None:
-                raise ValueError("Ping failed")
-                
             self.logger.info("✅ Connected to Binance Futures API")
 
             # Test real data fetch
@@ -3410,9 +3401,6 @@ def main():
         if bot_instance:
             bot_instance.stop_bot()
         logger.info("✅ Shutdown complete")
-
-app.wsgi_app = app.wsgi_app
-application = app  # For gunicorn compatibility
 
 if __name__ == "__main__":
     main()
