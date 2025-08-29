@@ -59,6 +59,24 @@ except ImportError:
     from apscheduler.schedulers.background import BackgroundScheduler
     import atexit
 
+# Make ML packages optional for deployment
+try:
+    import numpy as np
+    import pandas as pd
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.cluster import KMeans
+    from sklearn.ensemble import IsolationForest
+    HAS_ML = True
+except ImportError:
+    # Create dummy classes for deployment
+    class StandardScaler: pass
+    class KMeans: pass
+    class IsolationForest: pass
+    np = None
+    pd = None
+    HAS_ML = False
+    print("Running without ML packages - basic mode")
+
 # Scientific computing imports with error handling
 try:
     import numpy as np
