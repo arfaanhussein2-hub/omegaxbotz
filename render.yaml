@@ -1,13 +1,20 @@
-services:
+echo services:
   - type: web
     name: omegax-bot
     env: python
     plan: starter
-    buildCommand: pip install Flask==2.3.3 requests==2.31.0
+    runtime: python-3.11.6
+    buildCommand: |
+      python -m pip install --upgrade pip==23.3.1
+      pip install setuptools==68.2.2 wheel==0.41.3
+      pip install -r requirements.txt
     startCommand: python main.py
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.6
       - key: WEB_UI_PASSWORD
         value: omegax2024
       - key: USE_REALISTIC_PAPER
         value: true
     healthCheckPath: /ping
+    autoDeploy: true > render.yaml
