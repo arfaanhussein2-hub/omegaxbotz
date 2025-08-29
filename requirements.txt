@@ -1,33 +1,25 @@
-# Core dependencies optimized for Render free tier
-Flask==2.2.5
-Werkzeug==2.2.3
-gunicorn==20.1.0
+# Core Framework
+Flask==2.3.3
+APScheduler==3.10.4
+Werkzeug==2.3.7
 
-# Background scheduling
-APScheduler==3.9.1
+# API and Networking
+requests==2.31.0
+urllib3==2.0.7
 
-# HTTP client
-requests==2.28.2
+# Mathematical and Scientific Computing (Lightweight versions)
+numpy==1.24.4
+scipy==1.11.4
+pandas==2.0.3
 
-# Configuration management
-python-dotenv==0.21.1
+# Environment and Configuration
+python-dotenv==1.0.0
 
-# Lightweight math (instead of numpy/pandas)
-# Using pure Python implementations
+# Additional utilities for institutional algorithms
+statistics==1.0.3.5
 
-# Security (minimal version)
-cryptography==3.4.8
+# Optional: Faster JSON processing
+ujson==5.8.0
 
-# Basic utilities
-six==1.16.0
-psutil==5.9.1
-
-# Flask dependencies
-click==8.1.3
-itsdangerous==2.1.2
-MarkupSafe==2.1.3
-Jinja2==3.1.2
-
-# Build essentials
-setuptools==60.0.0
-wheel==0.37.1
+# Memory optimization
+psutil==5.9.6

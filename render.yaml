@@ -1,33 +1,148 @@
 services:
   - type: web
-    name: omegax-trading-bot
-    env: python
-    runtime: python-3.10
+    name: omegax-institutional-bot
+    runtime: python
+    plan: free
+    
+    # Build Configuration
     buildCommand: |
       pip install --upgrade pip
-      pip install -r requirements.txt
-    startCommand: python main.py
-    plan: starter
+      pip install -r requirements.txt --no-cache-dir
+      python -c "import numpy; import scipy; import pandas; print('✅ All dependencies installed')"
     
-    envVars:
-      - key: PORT
-        value: 8080
-      - key: WEB_UI_PASSWORD
-        value: omegax2024!
-      - key: BINANCE_API_KEY
-        value: ""
-      - key: TELEGRAM_TOKEN
-        value: ""
-      - key: TELEGRAM_CHAT_ID
-        value: ""
-      - key: USE_REALISTIC_PAPER
-        value: "true"
+    # Start Command
+    startCommand: python app.py
     
+    # Runtime Environment
+    env: python
+    region: oregon  # or virginia for better performance
+    
+    # Health Check
     healthCheckPath: /ping
     
-    disk:
-      name: omegax-db
-      mountPath: /opt/render/project/src
-      sizeGB: 1
+    # Environment Variables
+    envVars:
+      # Core Configuration
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      
+      # Application Settings
+      - key: FLASK_ENV
+        value: production
+      
+      - key: WEB_UI_PASSWORD
+        value: omegax2024!
+      
+      # Trading Configuration (Conservative for Free Tier)
+      - key: INITIAL_BALANCE
+        value: "5000.00"
+      
+      - key: BASE_RISK_PERCENT
+        value: "0.3"
+      
+      - key: MAX_POSITIONS
+        value: "10"
+      
+      - key: LEVERAGE
+        value: "3"
+      
+      - key: SIGNAL_THRESHOLD
+        value: "0.70"
+      
+      - key: UPDATE_INTERVAL
+        value: "60"
+      
+      - key: REPORT_INTERVAL
+        value: "1200"
+      
+      - key: KLINE_HISTORY_LIMIT
+        value: "100"
+      
+      # Algorithm Controls (Enable subset for free tier)
+      - key: GOLDMAN_ENABLED
+        value: "true"
+      
+      - key: JPMORGAN_ENABLED
+        value: "true"
+      
+      - key: CITADEL_ENABLED
+        value: "false"  # Disabled for resource conservation
+      
+      - key: RENAISSANCE_ENABLED
+        value: "true"
+      
+      - key: TWOSIGMA_ENABLED
+        value: "false"  # Disabled for resource conservation
+      
+      - key: DESHAW_ENABLED
+        value: "true"
+      
+      - key: BRIDGEWATER_ENABLED
+        value: "true"
+      
+      - key: AQR_ENABLED
+        value: "false"  # Disabled for resource conservation
+      
+      - key: WINTON_ENABLED
+        value: "true"
+      
+      - key: MANGROUP_ENABLED
+        value: "false"  # Disabled for resource conservation
+      
+      # Risk Management
+      - key: MAX_DRAWDOWN
+        value: "0.08"
+      
+      - key: STOP_LOSS_PERCENT
+        value: "1.5"
+      
+      - key: TAKE_PROFIT_PERCENT
+        value: "3.0"
+      
+      - key: POSITION_TIME_LIMIT
+        value: "86400"
+      
+      # System Optimization for Free Tier
+      - key: LOG_LEVEL
+        value: "WARNING"
+      
+      - key: SESSION_TIMEOUT
+        value: "43200"
+      
+      # Database
+      - key: DATABASE_FILE
+        value: "/tmp/omegax_institutional.db"
+      
+      # Optional: API Keys (add if using real trading)
+      - key: BINANCE_API_KEY
+        value: ""
+      
+      - key: BINANCE_SECRET_KEY
+        value: ""
+      
+      - key: BINANCE_TESTNET
+        value: "true"
+      
+      # Optional: Telegram Notifications
+      - key: TELEGRAM_TOKEN
+        value: ""
+      
+      - key: TELEGRAM_CHAT_ID
+        value: ""
+
+    # Resource Limits for Free Tier
+    scaling:
+      minInstances: 0  # Allow sleeping
+      maxInstances: 1
     
-    autoDeploy: true
+    # Disk space (free tier gets 1GB)
+    disk:
+      name: omegax-disk
+      size: 1GB
+      mount: /tmp
