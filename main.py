@@ -3411,13 +3411,8 @@ def main():
             bot_instance.stop_bot()
         logger.info("✅ Shutdown complete")
 
-# WSGI entry point for production servers
-if __name__ != "__main__":
-    # For gunicorn/waitress
-    app.logger.setLevel(logging.INFO)
-    
-# Create WSGI application
-application = app
+app.wsgi_app = app.wsgi_app
+application = app  # For gunicorn compatibility
 
 if __name__ == "__main__":
     main()
