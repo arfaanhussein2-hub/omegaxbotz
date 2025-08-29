@@ -1,1 +1,20 @@
-services:   - type: web     name: omegax-trading-bot     env: python     plan: starter     buildCommand: pip install -r requirements.txt     startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120     envVars:       - key: WEB_UI_PASSWORD         generateValue: true       - key: USE_REALISTIC_PAPER         value: true     healthCheckPath: /ping     autoDeploy: true  
+services:
+  - type: web
+    name: omegax-bot
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: WEB_UI_PASSWORD
+        value: omegax2024
+      - key: USE_REALISTIC_PAPER
+        value: true
+      - key: INITIAL_BALANCE
+        value: "1000"
+      - key: LEVERAGE
+        value: "10"
+      - key: MAX_POSITIONS
+        value: "12"
+    healthCheckPath: /ping
+    autoDeploy: true
