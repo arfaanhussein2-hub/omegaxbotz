@@ -1,38 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-OmegaX Enhanced Institutional Futures Trading Bot v3.0
-Render-Optimized Production Deployment
-
-Core Features:
-- 100+ top crypto pairs by liquidity
-- 24-hour position time limits
-- Institutional-grade quantitative models
-- Real-time web dashboard with authentication
-- Comprehensive risk management
-- Live market data from Binance
-- Telegram notifications
-- Persistent database storage
-- Thread-safe operations
-- Circuit breakers and error recovery
+OmegaX Trading Bot v3.0 - Render Free Tier Optimized
+Lightweight version without heavy ML dependencies
 """
 
 import os
 import sys
 import time
 import json
-import hmac
-import hashlib
 import logging
 import sqlite3
 import requests
 import threading
 import random
-import uuid
 import traceback
 from datetime import datetime, timedelta
-from decimal import Decimal, getcontext, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
-from collections import deque, defaultdict
+from decimal import Decimal, getcontext, InvalidOperation, ROUND_DOWN
+from collections import deque
 from functools import wraps
 import warnings
 
@@ -43,7 +28,6 @@ try:
 except ImportError:
     pass
 
-# Suppress warnings
 warnings.filterwarnings('ignore')
 
 # Flask imports
@@ -52,52 +36,22 @@ try:
     from apscheduler.schedulers.background import BackgroundScheduler
     import atexit
 except ImportError as e:
-    print(f"Installing required packages: {e}")
-    os.system("pip install Flask APScheduler python-dotenv")
+    print(f"Installing Flask: {e}")
+    os.system("pip install Flask APScheduler")
     from flask import Flask, render_template_string, jsonify, request, redirect, url_for, session
     from apscheduler.schedulers.background import BackgroundScheduler
     import atexit
 
-# Scientific computing with fallbacks
-try:
-    import numpy as np
-    import pandas as pd
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.cluster import KMeans
-    from sklearn.ensemble import IsolationForest
-    HAS_ML = True
-    np.seterr(all='ignore')
-except ImportError:
-    print("Running without ML packages - basic mode")
-    HAS_ML = False
-    
-    # Minimal fallbacks
-    class np:
-        @staticmethod
-        def array(data, **kwargs): return list(data)
-        @staticmethod
-        def isfinite(x): return abs(x) < 1e20 if isinstance(x, (int, float)) else True
-        @staticmethod
-        def all(x): return all(x) if hasattr(x, '__iter__') else True
-        @staticmethod
-        def clip(x, a, b): return max(a, min(b, x))
-        @staticmethod
-        def log(x): return __import__('math').log(x)
-        
-    pd = None
-
-# Set decimal precision
 getcontext().prec = 32
-
-# Global variables
 bot_instance = None
 
-# ====================== ENHANCED CONFIGURATION ======================
+# ====================== CONFIGURATION ======================
 class Config:
-    """Render-optimized configuration"""
+    """Lightweight configuration for Render free tier"""
     
     # Security
-    SECRET_KEY = os.environ.get('SECRET_KEY', hashlib.sha256(str(random.getrandbits(256)).encode()).hexdigest())
+    SECRET_KEY = os.environ.get('SECRET_KEY', 
+        ''.join([str(random.randint(0,9)) for _ in range(32)]))
     WEB_UI_PASSWORD = os.environ.get('WEB_UI_PASSWORD', 'omegax2024!')
     
     # API Configuration
@@ -128,68 +82,23 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     UPDATE_INTERVAL = int(os.environ.get('UPDATE_INTERVAL', '30'))
     REPORT_INTERVAL = int(os.environ.get('REPORT_INTERVAL', '600'))
-    DATABASE_FILE = os.environ.get('DATABASE_FILE', 'omegax_trading_v3.db')
+    DATABASE_FILE = os.environ.get('DATABASE_FILE', 'omegax.db')
     
-    # Rate Limiting
-    MAX_REQUESTS_PER_MINUTE = int(os.environ.get('MAX_REQUESTS_PER_MINUTE', '500'))
-    WEIGHT_LIMIT_PER_MINUTE = int(os.environ.get('WEIGHT_LIMIT_PER_MINUTE', '2400'))
-    
-    # Render-specific
+    # Render optimized
     USE_REALISTIC_PAPER = os.environ.get('USE_REALISTIC_PAPER', 'true').lower() == 'true'
     SESSION_TIMEOUT = int(os.environ.get('SESSION_TIMEOUT', '86400'))
     
-    # Top 100 Crypto Futures Pairs
+    # Essential crypto pairs (reduced for faster processing)
     TRADING_PAIRS = [
         'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 
         'SOLUSDT', 'DOGEUSDT', 'MATICUSDT', 'DOTUSDT', 'LTCUSDT',
         'AVAXUSDT', 'LINKUSDT', 'UNIUSDT', 'ATOMUSDT', 'XLMUSDT',
-        'VETUSDT', 'FILUSDT', 'ICPUSDT', 'HBARUSDT', 'APTUSDT',
-        'NEARUSDT', 'GRTUSDT', 'SANDUSDT', 'MANAUSDT', 'FLOWUSDT',
-        'EGLDUSDT', 'XTZUSDT', 'THETAUSDT', 'AXSUSDT', 'AAVEUSDT',
-        'EOSUSDT', 'KLAYUSDT', 'RUNEUSDT', 'FTMUSDT', 'NEOUSDT',
-        'CAKEUSDT', 'IOTAUSDT', 'ZECUSDT', 'DASHUSDT', 'WAVESUSDT',
-        'CHZUSDT', 'BATUSDT', 'GALAUSDT', 'LRCUSDT', 'ENJUSDT',
-        'CELOUSDT', 'ZILUSDT', 'QTUMUSDT', 'OMGUSDT', 'SUSHIUSDT',
-        'COMPUSDT', 'MKRUSDT', 'SNXUSDT', 'YFIUSDT', 'CRVUSDT',
-        'BALUSDT', 'RENUSDT', 'KNCUSDT', 'BANDUSDT', 'STORJUSDT',
-        'RSRUSDT', 'OCEANUSDT', 'ALICEUSDT', 'BAKEUSDT', 'FLMUSDT',
-        'RAYUSDT', 'C98USDT', 'MASKUSDT', 'TOMOUSDT', 'FTTUSDT',
-        'SKLUSDT', 'GTCUSDT', 'TLMUSDT', 'ERNUSDT', 'DYDXUSDT',
-        '1INCHUSDT', 'ENSUSDT', 'IMXUSDT', 'STGUSDT', 'GMTUSDT',
-        'APEUSDT', 'GALUSDT', 'OPUSDT', 'JASMYUSDT', 'DARUSDT',
-        'UNFIUSDT', 'PHAUSDT', 'ROSEUSDT', 'DUSKUSDT', 'VANDAUSDT',
-        'FOOTBALLUSDT', 'AMBUSDT', 'LEVERUSDT', 'STXUSDT', 'ARKMUSDT',
-        'GLMRUSDT', 'LQTYUSDT', 'IDUSDT', 'EDUUSDT', 'SUIUSDT'
+        'VETUSDT', 'FILUSDT', 'ICPUSDT', 'HBARUSDT', 'APTUSDT'
     ]
 
-# ====================== LOGGING SETUP ======================
-def setup_logging():
-    """Setup production-grade logging for Render"""
-    logger = logging.getLogger()
-    logger.setLevel(getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO))
-    
-    # Clear existing handlers
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-    
-    # Create formatter
-    formatter = logging.Formatter(
-        '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    # Console handler for Render logs
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    # Suppress noisy loggers
-    for noisy_logger in ['urllib3', 'requests', 'werkzeug']:
-        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
-
-# ====================== UTILITY FUNCTIONS ======================
+# ====================== LIGHTWEIGHT MATH FUNCTIONS ======================
 def safe_float(value, default=0.0):
-    """Safely convert value to float"""
+    """Safely convert to float"""
     try:
         result = float(value)
         return result if abs(result) < 1e20 else default
@@ -197,7 +106,7 @@ def safe_float(value, default=0.0):
         return default
 
 def safe_decimal(value, default=Decimal('0')):
-    """Safely convert value to Decimal"""
+    """Safely convert to Decimal"""
     try:
         if isinstance(value, Decimal):
             return value if value.is_finite() else default
@@ -206,13 +115,54 @@ def safe_decimal(value, default=Decimal('0')):
     except (ValueError, TypeError, InvalidOperation):
         return default
 
+def calculate_sma(values, period):
+    """Simple moving average"""
+    if len(values) < period:
+        return None
+    return sum(values[-period:]) / period
+
+def calculate_rsi(prices, period=14):
+    """Simple RSI calculation"""
+    if len(prices) < period + 1:
+        return 50
+    
+    changes = [prices[i] - prices[i-1] for i in range(1, len(prices))]
+    gains = [max(0, change) for change in changes[-period:]]
+    losses = [max(0, -change) for change in changes[-period:]]
+    
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    
+    if avg_loss == 0:
+        return 100
+    
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
 def validate_symbol(symbol):
     """Validate trading symbol"""
     if not symbol or not isinstance(symbol, str):
         return False
     return symbol.upper().strip() in Config.TRADING_PAIRS
 
-# ====================== AUTHENTICATION ======================
+# ====================== SIMPLIFIED COMPONENTS ======================
+def setup_logging():
+    """Simple logging setup"""
+    logger = logging.getLogger()
+    logger.setLevel(getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO))
+    
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # Quiet noisy loggers
+    for noisy_logger in ['urllib3', 'requests', 'werkzeug']:
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
 def require_auth(f):
     """Authentication decorator"""
     @wraps(f)
@@ -228,9 +178,8 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# ====================== SIMPLIFIED TRADING COMPONENTS ======================
 class Signal:
-    """Trading signal class"""
+    """Simple signal class"""
     def __init__(self, symbol, side, confidence, entry_price, stop_loss, take_profit, reasoning, timestamp):
         self.symbol = symbol
         self.side = side
@@ -242,23 +191,22 @@ class Signal:
         self.timestamp = timestamp
 
 class TelegramBot:
-    """Simplified Telegram bot for notifications"""
+    """Lightweight Telegram bot"""
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.token = Config.TELEGRAM_TOKEN.strip()
         self.chat_id = Config.TELEGRAM_CHAT_ID.strip()
         self.enabled = bool(self.token and self.chat_id)
         self.last_send = 0
-        self.min_interval = 2.0
 
     def send_message(self, message, critical=False):
-        """Send Telegram message with rate limiting"""
+        """Send message with rate limiting"""
         if not self.enabled:
             self.logger.info(f"Telegram: {message}")
             return
 
         now = time.time()
-        if not critical and now - self.last_send < self.min_interval:
+        if not critical and now - self.last_send < 2.0:
             return
 
         try:
@@ -266,46 +214,18 @@ class TelegramBot:
             data = {
                 'chat_id': self.chat_id,
                 'text': message.strip()[:4000],
-                'parse_mode': 'HTML',
-                'disable_web_page_preview': True
+                'parse_mode': 'HTML'
             }
             
-            response = requests.post(url, json=data, timeout=15)
+            response = requests.post(url, json=data, timeout=10)
             if response.status_code == 200:
                 self.last_send = now
-                self.logger.debug("Telegram message sent")
-            else:
-                self.logger.warning(f"Telegram error: {response.status_code}")
                 
         except Exception as e:
             self.logger.warning(f"Telegram failed: {e}")
 
-class RateLimiter:
-    """Simple rate limiter"""
-    def __init__(self, max_requests_per_minute, max_weight_per_minute):
-        self.max_requests = max_requests_per_minute
-        self.requests = deque()
-        self.lock = threading.RLock()
-
-    def wait_if_needed(self, weight=1):
-        """Rate limiting with basic backoff"""
-        with self.lock:
-            now = time.time()
-            
-            # Clean old requests
-            while self.requests and now - self.requests[0] > 60:
-                self.requests.popleft()
-            
-            # Check limit
-            if len(self.requests) >= self.max_requests:
-                sleep_time = 60 - (now - self.requests[0])
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-            
-            self.requests.append(now)
-
-class RealisticPaperTradingClient:
-    """Simplified paper trading client for Render"""
+class LightweightTradingClient:
+    """Minimal trading client for Render free tier"""
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -313,47 +233,42 @@ class RealisticPaperTradingClient:
         self.positions = {}
         self.base_url = "https://fapi.binance.com"
         self.session = requests.Session()
-        self.rate_limiter = RateLimiter(Config.MAX_REQUESTS_PER_MINUTE, Config.WEIGHT_LIMIT_PER_MINUTE)
+        self.session.headers.update({'User-Agent': 'OmegaX-Bot/3.0'})
         self.position_lock = threading.RLock()
-        self.price_cache = {}
-        self.last_cache_update = 0
         
-        self.logger.info("✅ Paper trading client initialized")
+        self.logger.info("✅ Trading client ready")
 
-    def _request(self, method, endpoint, params=None, weight=1, retries=3):
-        """Make API request with error handling"""
-        self.rate_limiter.wait_if_needed(weight)
+    def _request(self, method, endpoint, params=None, retries=2):
+        """Simple API request"""
         params = params or {}
         url = self.base_url + endpoint
 
         for attempt in range(retries):
             try:
                 if method.upper() == 'GET':
-                    response = self.session.get(url, params=params, timeout=20)
+                    response = self.session.get(url, params=params, timeout=15)
                 else:
-                    response = self.session.post(url, data=params, timeout=20)
+                    response = self.session.post(url, data=params, timeout=15)
                 
                 response.raise_for_status()
                 return response.json()
                 
             except Exception as e:
                 if attempt == retries - 1:
-                    raise RuntimeError(f"API request failed: {e}")
-                time.sleep(2 ** attempt)
+                    raise RuntimeError(f"API failed: {e}")
+                time.sleep(1)
 
     def get_balance(self):
-        """Get current balance"""
-        with self.position_lock:
-            return self.balance
+        return self.balance
 
     def get_positions(self):
-        """Get current positions"""
+        """Get positions with current prices"""
         with self.position_lock:
             positions = []
             
+            # Get current prices
             try:
-                # Get current prices
-                ticker_data = self._request('GET', '/fapi/v1/ticker/price', weight=2)
+                ticker_data = self._request('GET', '/fapi/v1/ticker/price')
                 prices = {item['symbol']: float(item['price']) for item in ticker_data 
                          if item['symbol'] in self.positions}
             except:
@@ -383,58 +298,40 @@ class RealisticPaperTradingClient:
                         'percentage': percentage,
                         'timestamp': pos['timestamp']
                     })
-                except Exception as e:
-                    self.logger.warning(f"Error processing position {symbol}: {e}")
+                except Exception:
                     continue
             
             return positions
 
-    def get_klines(self, symbol, interval, limit=150):
+    def get_klines(self, symbol, interval, limit=50):
         """Get candlestick data"""
-        if not validate_symbol(symbol):
-            raise ValueError(f"Invalid symbol: {symbol}")
-        
-        params = {
-            'symbol': symbol.upper(),
-            'interval': interval,
-            'limit': min(limit, 500)
-        }
-        
-        return self._request('GET', '/fapi/v1/klines', params, weight=1)
+        params = {'symbol': symbol.upper(), 'interval': interval, 'limit': min(limit, 100)}
+        return self._request('GET', '/fapi/v1/klines', params)
 
     def get_ticker_price(self, symbol):
         """Get current price"""
-        if not validate_symbol(symbol):
-            raise ValueError(f"Invalid symbol: {symbol}")
-        
         params = {'symbol': symbol.upper()}
-        return self._request('GET', '/fapi/v1/ticker/price', params, weight=1)
-
-    def set_leverage(self, symbol, leverage):
-        """Simulate leverage setting"""
-        self.logger.info(f"📊 Simulated: Set {symbol} leverage to {leverage}x")
-        return {'symbol': symbol, 'leverage': leverage, 'status': 'simulated'}
+        return self._request('GET', '/fapi/v1/ticker/price', params)
 
     def place_order(self, symbol, side, order_type, quantity, price=None):
         """Place simulated order"""
         try:
-            # Get current market price
+            # Get current price
             ticker = self.get_ticker_price(symbol)
             current_price = float(ticker['price'])
             
-            # Add realistic slippage
-            slippage = random.uniform(0.0002, 0.0008)
+            # Add minimal slippage
+            slippage = random.uniform(0.0001, 0.0005)
             if side == 'BUY':
                 execution_price = current_price * (1 + slippage)
             else:
                 execution_price = current_price * (1 - slippage)
 
-            order_id = random.randint(10000000, 99999999)
             timestamp = time.time()
 
             with self.position_lock:
                 if symbol in self.positions:
-                    # Close existing position
+                    # Close existing
                     existing = self.positions[symbol]
                     entry_price = existing['entry_price']
                     size = existing['size']
@@ -445,10 +342,10 @@ class RealisticPaperTradingClient:
                         pnl = (entry_price - execution_price) * size
                     
                     self.balance += Decimal(str(pnl))
-                    self.logger.info(f"💰 Closed {existing['side']} {symbol}: P&L ${pnl:.2f}")
+                    self.logger.info(f"Closed {existing['side']} {symbol}: P&L ${pnl:.2f}")
                     del self.positions[symbol]
                 else:
-                    # Open new position
+                    # Open new
                     position_side = 'LONG' if side == 'BUY' else 'SHORT'
                     self.positions[symbol] = {
                         'side': position_side,
@@ -456,21 +353,20 @@ class RealisticPaperTradingClient:
                         'entry_price': execution_price,
                         'timestamp': timestamp
                     }
-                    self.logger.info(f"🚀 Opened {position_side} {symbol}: {float(quantity):.6f} @ ${execution_price:.4f}")
+                    self.logger.info(f"Opened {position_side} {symbol}: {float(quantity):.6f} @ ${execution_price:.4f}")
 
             return {
                 'symbol': symbol,
-                'orderId': order_id,
+                'orderId': random.randint(10000000, 99999999),
                 'status': 'FILLED',
                 'side': side,
-                'type': order_type,
                 'executedQty': str(quantity),
                 'price': str(execution_price),
                 'timestamp': timestamp
             }
             
         except Exception as e:
-            self.logger.error(f"Order failed for {symbol}: {e}")
+            self.logger.error(f"Order failed: {e}")
             raise
 
     def close_position(self, symbol):
@@ -484,63 +380,54 @@ class RealisticPaperTradingClient:
             return self.place_order(symbol, side, 'MARKET', Decimal(str(pos['size'])))
 
     def test_connectivity(self):
-        """Test API connectivity"""
+        """Test connection"""
         try:
             self._request('GET', '/fapi/v1/ping')
-            self.logger.info("✅ Connected to Binance Futures API")
+            self.logger.info("✅ Connected to Binance API")
         except Exception as e:
-            self.logger.error(f"❌ Connectivity test failed: {e}")
+            self.logger.error(f"❌ Connection failed: {e}")
             raise
 
-class SimpleTradingBot:
-    """Simplified trading bot for Render deployment"""
+class MinimalTradingBot:
+    """Lightweight trading bot for Render free tier"""
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         
-        # Initialize components
         try:
-            self.binance = RealisticPaperTradingClient()
+            self.binance = LightweightTradingClient()
             self.binance.test_connectivity()
             self.telegram = TelegramBot()
         except Exception as e:
-            self.logger.error(f"Failed to initialize: {e}")
+            self.logger.error(f"Init failed: {e}")
             raise
 
-        # Bot state
+        # State
         self.running = False
         self.start_time = time.time()
         self.last_report = 0
-        
-        # Position tracking
         self.positions = {}
         self.balance = Config.INITIAL_BALANCE
         self.total_pnl = Decimal('0')
         self.position_lock = threading.RLock()
-        
-        # Performance tracking
         self.trade_count = 0
         self.winning_trades = 0
         self.total_volume = Decimal('0')
         self.max_drawdown = Decimal('0')
         self.consecutive_failures = 0
         self.error_count = 0
-        
-        # Threading
         self._thread = None
         self._stop_event = threading.Event()
         
-        # Initialize database
         self._init_database()
 
     def _init_database(self):
-        """Initialize SQLite database"""
+        """Simple database setup"""
         try:
-            self.conn = sqlite3.connect(Config.DATABASE_FILE, check_same_thread=False, timeout=60)
+            self.conn = sqlite3.connect(Config.DATABASE_FILE, check_same_thread=False, timeout=30)
             self.db_lock = threading.Lock()
             
             with self.db_lock:
-                self.conn.execute('PRAGMA journal_mode=WAL')
                 self.conn.execute('''
                     CREATE TABLE IF NOT EXISTS positions (
                         symbol TEXT PRIMARY KEY,
@@ -560,17 +447,16 @@ class SimpleTradingBot:
                         timestamp REAL NOT NULL
                     )
                 ''')
-                
                 self.conn.commit()
             
-            self.logger.info(f"✅ Database initialized: {Config.DATABASE_FILE}")
+            self.logger.info("✅ Database ready")
             
         except Exception as e:
-            self.logger.error(f"Database init failed: {e}")
+            self.logger.error(f"Database failed: {e}")
             raise
 
     def start_bot(self):
-        """Start the trading bot"""
+        """Start bot"""
         if self._thread and self._thread.is_alive():
             return
         
@@ -578,10 +464,10 @@ class SimpleTradingBot:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run_wrapper, daemon=False)
         self._thread.start()
-        self.logger.info("✅ Trading bot started")
+        self.logger.info("✅ Bot started")
 
     def stop_bot(self):
-        """Stop the trading bot"""
+        """Stop bot"""
         self.running = False
         self._stop_event.set()
         
@@ -589,69 +475,46 @@ class SimpleTradingBot:
             self._thread.join(timeout=30)
 
     def _run_wrapper(self):
-        """Main bot loop wrapper"""
+        """Run wrapper"""
         try:
             self.run()
         except Exception as e:
-            self.logger.error(f"Fatal bot error: {e}")
-            self.telegram.send_message(f"💥 <b>FATAL ERROR</b>\n{str(e)[:300]}", critical=True)
+            self.logger.error(f"Fatal error: {e}")
+            self.telegram.send_message(f"💥 ERROR: {str(e)[:200]}", critical=True)
         finally:
             self.running = False
 
     def get_balance(self):
-        """Get current balance"""
         return self.binance.get_balance()
 
     def get_positions(self):
-        """Get current positions"""
         return self.binance.get_positions()
 
     def generate_simple_signal(self, symbol):
-        """Generate simple trading signal"""
+        """Lightweight signal generation"""
         try:
-            # Get recent price data
-            klines = self.binance.get_klines(symbol, '5m', 50)
+            klines = self.binance.get_klines(symbol, '5m', 30)
             if len(klines) < 20:
                 return None
             
-            # Extract close prices
             closes = [float(kline[4]) for kline in klines[-20:]]
             current_price = closes[-1]
             
-            # Simple moving averages
-            ma_short = sum(closes[-5:]) / 5
-            ma_long = sum(closes[-20:]) / 20
+            # Simple strategy: MA crossover + RSI
+            ma_short = calculate_sma(closes, 5)
+            ma_long = calculate_sma(closes, 15)
+            rsi = calculate_rsi(closes, 14)
             
-            # Simple RSI
-            gains = []
-            losses = []
-            for i in range(1, len(closes)):
-                change = closes[i] - closes[i-1]
-                if change > 0:
-                    gains.append(change)
-                    losses.append(0)
-                else:
-                    gains.append(0)
-                    losses.append(-change)
+            if not ma_short or not ma_long:
+                return None
             
-            avg_gain = sum(gains[-14:]) / 14 if len(gains) >= 14 else 0
-            avg_loss = sum(losses[-14:]) / 14 if len(losses) >= 14 else 0
-            
-            if avg_loss > 0:
-                rs = avg_gain / avg_loss
-                rsi = 100 - (100 / (1 + rs))
-            else:
-                rsi = 100
-            
-            # Generate signal
+            # Signal logic
             confidence = 0
             side = None
             
-            # Bullish signal
             if ma_short > ma_long and rsi < 70:
                 side = 'LONG'
                 confidence = 0.75
-            # Bearish signal
             elif ma_short < ma_long and rsi > 30:
                 side = 'SHORT'
                 confidence = 0.75
@@ -659,15 +522,17 @@ class SimpleTradingBot:
             if confidence < float(Config.SIGNAL_THRESHOLD):
                 return None
             
-            # Calculate stops
-            atr = (max(closes[-10:]) - min(closes[-10:])) / 10
+            # Simple stops
+            price_range = max(closes) - min(closes)
+            stop_distance = price_range * 0.02
+            profit_distance = price_range * 0.04
             
             if side == 'LONG':
-                stop_loss = Decimal(str(current_price - atr * 2))
-                take_profit = Decimal(str(current_price + atr * 3))
+                stop_loss = Decimal(str(current_price - stop_distance))
+                take_profit = Decimal(str(current_price + profit_distance))
             else:
-                stop_loss = Decimal(str(current_price + atr * 2))
-                take_profit = Decimal(str(current_price - atr * 3))
+                stop_loss = Decimal(str(current_price + stop_distance))
+                take_profit = Decimal(str(current_price - profit_distance))
             
             return Signal(
                 symbol=symbol,
@@ -676,16 +541,16 @@ class SimpleTradingBot:
                 entry_price=Decimal(str(current_price)),
                 stop_loss=stop_loss,
                 take_profit=take_profit,
-                reasoning=f"MA crossover + RSI {rsi:.1f}",
+                reasoning=f"MA+RSI {rsi:.0f}",
                 timestamp=time.time()
             )
             
         except Exception as e:
-            self.logger.debug(f"Signal generation failed for {symbol}: {e}")
+            self.logger.debug(f"Signal failed for {symbol}: {e}")
             return None
 
     def calculate_position_size(self, entry_price, stop_loss):
-        """Calculate position size"""
+        """Simple position sizing"""
         try:
             balance = self.get_balance()
             risk_amount = balance * Config.BASE_RISK_PERCENT / 100
@@ -704,7 +569,7 @@ class SimpleTradingBot:
             return Decimal('0')
 
     def open_position(self, signal):
-        """Open a new position"""
+        """Open position"""
         try:
             with self.position_lock:
                 if signal.symbol in self.positions:
@@ -713,16 +578,13 @@ class SimpleTradingBot:
                 if len(self.positions) >= Config.MAX_POSITIONS:
                     return False
             
-            # Calculate position size
             position_size = self.calculate_position_size(signal.entry_price, signal.stop_loss)
             if position_size <= 0:
                 return False
             
-            # Place order
             side = 'BUY' if signal.side == 'LONG' else 'SELL'
             self.binance.place_order(signal.symbol, side, 'MARKET', position_size)
             
-            # Track position
             with self.position_lock:
                 self.positions[signal.symbol] = {
                     'side': signal.side,
@@ -733,48 +595,33 @@ class SimpleTradingBot:
                     'timestamp': signal.timestamp
                 }
             
-            # Save to database
-            with self.db_lock:
-                self.conn.execute('''
-                    INSERT OR REPLACE INTO positions 
-                    (symbol, side, size, entry_price, timestamp)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (signal.symbol, signal.side, float(position_size), 
-                      float(signal.entry_price), signal.timestamp))
-                self.conn.commit()
-            
             self.total_volume += signal.entry_price * position_size
             
             self.telegram.send_message(
-                f"🚀 <b>POSITION OPENED</b>\n"
-                f"📊 {signal.symbol}\n"
-                f"📈 {signal.side} {float(position_size):.6f}\n"
-                f"💰 Entry: ${float(signal.entry_price):.4f}\n"
-                f"⚡ Confidence: {signal.confidence:.1%}\n"
-                f"🧠 {signal.reasoning}"
+                f"🚀 OPENED {signal.symbol} {signal.side}\n"
+                f"Size: {float(position_size):.6f}\n"
+                f"Entry: ${float(signal.entry_price):.4f}\n"
+                f"Confidence: {signal.confidence:.1%}"
             )
             
-            self.consecutive_failures = 0
             return True
             
         except Exception as e:
             self.consecutive_failures += 1
-            self.logger.error(f"Failed to open position for {signal.symbol}: {e}")
+            self.logger.error(f"Open failed {signal.symbol}: {e}")
             return False
 
     def close_position(self, symbol, reason="Manual"):
-        """Close a position"""
+        """Close position"""
         try:
             with self.position_lock:
                 if symbol not in self.positions:
                     return False
                 position = self.positions[symbol].copy()
             
-            # Get current price
             ticker = self.binance.get_ticker_price(symbol)
             current_price = float(ticker['price'])
             
-            # Close on exchange
             self.binance.close_position(symbol)
             
             # Calculate P&L
@@ -797,35 +644,26 @@ class SimpleTradingBot:
                 if symbol in self.positions:
                     del self.positions[symbol]
             
-            # Save trade to database
+            # Save trade
             with self.db_lock:
                 self.conn.execute('''
                     INSERT INTO trades (symbol, side, pnl, timestamp)
                     VALUES (?, ?, ?, ?)
                 ''', (symbol, position['side'], pnl, time.time()))
-                
-                self.conn.execute('DELETE FROM positions WHERE symbol = ?', (symbol,))
                 self.conn.commit()
             
-            # Send notification
+            # Notify
             emoji = "✅" if pnl > 0 else "❌"
-            duration = time.time() - position['timestamp']
-            duration_str = f"{duration/3600:.1f}h" if duration >= 3600 else f"{duration/60:.0f}m"
-            
             self.telegram.send_message(
-                f"{emoji} <b>POSITION CLOSED</b>\n"
-                f"📊 {symbol}\n"
-                f"📈 {position['side']}\n"
-                f"💵 P&L: ${pnl:+.2f}\n"
-                f"⏱️ Duration: {duration_str}\n"
-                f"📝 Reason: {reason}"
+                f"{emoji} CLOSED {symbol} {position['side']}\n"
+                f"P&L: ${pnl:+.2f}\n"
+                f"Reason: {reason}"
             )
             
-            self.logger.info(f"✅ Closed {position['side']} {symbol}: P&L ${pnl:+.2f}")
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to close {symbol}: {e}")
+            self.logger.error(f"Close failed {symbol}: {e}")
             return False
 
     def close_all_positions(self):
@@ -838,13 +676,13 @@ class SimpleTradingBot:
                 if self.close_position(position['symbol'], "Close All"):
                     closed_count += 1
                 time.sleep(0.5)
-            except Exception as e:
-                self.logger.warning(f"Failed to close {position['symbol']}: {e}")
+            except Exception:
+                pass
         
         return closed_count
 
     def manage_positions(self):
-        """Manage existing positions"""
+        """Manage positions"""
         try:
             current_positions = self.get_positions()
             current_time = time.time()
@@ -860,14 +698,13 @@ class SimpleTradingBot:
                         stored_position = self.positions[symbol]
                         position_time = stored_position['timestamp']
                         
-                        # Check 24-hour time limit
+                        # 24-hour limit
                         if current_time - position_time > Config.POSITION_TIME_LIMIT:
-                            self.close_position(symbol, "24-Hour Time Limit")
+                            self.close_position(symbol, "24h Limit")
                             continue
                         
-                        # Check stop loss and take profit
+                        # Stop/profit checks
                         current_price = position['mark_price']
-                        entry_price = stored_position['entry_price']
                         stop_loss = stored_position['stop_loss']
                         take_profit = stored_position['take_profit']
                         
@@ -876,27 +713,23 @@ class SimpleTradingBot:
                                 self.close_position(symbol, "Stop Loss")
                             elif current_price >= take_profit:
                                 self.close_position(symbol, "Take Profit")
-                        else:  # SHORT
+                        else:
                             if current_price >= stop_loss:
                                 self.close_position(symbol, "Stop Loss")
                             elif current_price <= take_profit:
                                 self.close_position(symbol, "Take Profit")
                 
                 except Exception as e:
-                    self.logger.warning(f"Error managing {position.get('symbol', 'unknown')}: {e}")
+                    self.logger.warning(f"Manage error {position.get('symbol')}: {e}")
                     
         except Exception as e:
             self.logger.error(f"Position management failed: {e}")
 
     def scan_for_signals(self):
-        """Scan for trading signals"""
+        """Lightweight signal scanning"""
         try:
-            # Limit scanning based on available slots
-            max_scans = max(10, Config.MAX_POSITIONS - len(self.positions))
+            max_scans = max(5, Config.MAX_POSITIONS - len(self.positions))
             pairs_to_scan = Config.TRADING_PAIRS[:max_scans]
-            
-            signals_generated = 0
-            positions_opened = 0
             
             for symbol in pairs_to_scan:
                 try:
@@ -910,33 +743,22 @@ class SimpleTradingBot:
                     if len(self.positions) >= Config.MAX_POSITIONS:
                         break
                     
-                    # Generate signal
                     signal = self.generate_simple_signal(symbol)
-                    if not signal:
-                        continue
+                    if signal and signal.confidence >= float(Config.SIGNAL_THRESHOLD):
+                        self.open_position(signal)
                     
-                    signals_generated += 1
-                    
-                    # Open position if signal is strong enough
-                    if signal.confidence >= float(Config.SIGNAL_THRESHOLD):
-                        if self.open_position(signal):
-                            positions_opened += 1
-                    
-                    time.sleep(0.3)  # Rate limiting
+                    time.sleep(0.5)  # Rate limiting
                     
                 except Exception as e:
-                    self.logger.debug(f"Signal scan failed for {symbol}: {e}")
+                    self.logger.debug(f"Scan failed {symbol}: {e}")
                     continue
-            
-            if signals_generated > 0:
-                self.logger.debug(f"Scan: {signals_generated} signals, {positions_opened} opened")
                 
         except Exception as e:
             self.consecutive_failures += 1
-            self.logger.error(f"Signal scanning failed: {e}")
+            self.logger.error(f"Scanning failed: {e}")
 
     def send_periodic_report(self):
-        """Send periodic status report"""
+        """Send reports"""
         try:
             now = time.time()
             if now - self.last_report < Config.REPORT_INTERVAL:
@@ -951,24 +773,14 @@ class SimpleTradingBot:
             runtime_hours = (now - self.start_time) / 3600
             
             report = (
-                f"📊 <b>OMEGAX REPORT</b>\n"
-                f"💰 Balance: ${float(balance):,.2f}\n"
-                f"📈 Unrealized: ${total_unrealized_pnl:+,.2f}\n"
-                f"📊 Return: {float(total_return):+.2f}%\n"
-                f"🎯 Win Rate: {win_rate:.1f}% ({self.winning_trades}/{self.trade_count})\n"
-                f"🔢 Positions: {len(positions)}/{Config.MAX_POSITIONS}\n"
-                f"⏰ Uptime: {runtime_hours:.1f}h"
+                f"📊 OMEGAX REPORT\n"
+                f"Balance: ${float(balance):,.2f}\n"
+                f"P&L: ${total_unrealized_pnl:+,.2f}\n"
+                f"Return: {float(total_return):+.2f}%\n"
+                f"Win Rate: {win_rate:.1f}%\n"
+                f"Positions: {len(positions)}/{Config.MAX_POSITIONS}\n"
+                f"Uptime: {runtime_hours:.1f}h"
             )
-            
-            if positions:
-                report += f"\n\n<b>POSITIONS ({len(positions)}):</b>\n"
-                for pos in positions[:5]:  # Show top 5
-                    emoji = "🟢" if pos.get('pnl', 0) > 0 else "🔴"
-                    elapsed = now - pos.get('timestamp', now)
-                    remaining = (Config.POSITION_TIME_LIMIT - elapsed) / 3600
-                    remaining_str = f"{remaining:.1f}h" if remaining > 0 else "EXPIRED"
-                    
-                    report += f"{emoji} {pos['symbol']} {pos['side']}: ${pos.get('pnl', 0):+.2f} ({remaining_str})\n"
             
             self.telegram.send_message(report)
             self.last_report = now
@@ -977,35 +789,23 @@ class SimpleTradingBot:
             self.logger.error(f"Report failed: {e}")
 
     def run(self):
-        """Main trading loop"""
-        self.logger.info("🚀 Starting OmegaX Trading Bot v3.0")
+        """Main loop"""
+        self.logger.info("🚀 Starting OmegaX Bot v3.0")
         
-        # Send startup notification
         self.telegram.send_message(
-            f"🚀 <b>OMEGAX BOT STARTED</b>\n"
-            f"💰 Balance: ${float(Config.INITIAL_BALANCE):,.2f}\n"
-            f"📊 Pairs: {len(Config.TRADING_PAIRS)} coins\n"
-            f"⚡ Leverage: {Config.LEVERAGE}x\n"
-            f"🎯 Max Positions: {Config.MAX_POSITIONS}\n"
-            f"⏱️ Position Limit: 24 hours\n"
-            f"🔒 Mode: Paper Trading\n"
-            f"🚀 Status: OPERATIONAL",
+            f"🚀 OMEGAX STARTED\n"
+            f"Balance: ${float(Config.INITIAL_BALANCE):,.2f}\n"
+            f"Pairs: {len(Config.TRADING_PAIRS)}\n"
+            f"Status: OPERATIONAL",
             critical=True
         )
         
-        loop_count = 0
-        
         try:
             while self.running and not self._stop_event.is_set():
-                loop_start = time.time()
-                loop_count += 1
-                
                 try:
                     self.manage_positions()
-                    
                     if not self._stop_event.is_set():
                         self.scan_for_signals()
-                    
                     if not self._stop_event.is_set():
                         self.send_periodic_report()
                         
@@ -1014,20 +814,14 @@ class SimpleTradingBot:
                     self.error_count += 1
                     self.logger.error(f"Loop error: {e}")
                 
-                # Adaptive sleep
-                loop_time = time.time() - loop_start
-                sleep_time = max(10, Config.UPDATE_INTERVAL - loop_time)
-                
-                # Interruptible sleep
-                for _ in range(int(sleep_time)):
+                # Sleep
+                for _ in range(Config.UPDATE_INTERVAL):
                     if self._stop_event.is_set():
                         break
                     time.sleep(1)
                     
-        except KeyboardInterrupt:
-            self.logger.info("Received interrupt signal")
         except Exception as e:
-            self.logger.error(f"Fatal error: {e}")
+            self.logger.error(f"Fatal: {e}")
         finally:
             self.stop()
 
@@ -1037,23 +831,9 @@ class SimpleTradingBot:
         self._stop_event.set()
         
         try:
-            balance = self.get_balance()
-            positions = self.get_positions()
-            runtime_hours = (time.time() - self.start_time) / 3600
-            total_return = ((balance - Config.INITIAL_BALANCE) / Config.INITIAL_BALANCE) * 100
-            win_rate = (self.winning_trades / self.trade_count * 100) if self.trade_count > 0 else 0
-            
-            self.telegram.send_message(
-                f"🛑 <b>OMEGAX BOT STOPPED</b>\n"
-                f"💰 Final Balance: ${float(balance):,.2f}\n"
-                f"📈 Total Return: {float(total_return):+.2f}%\n"
-                f"🎯 Win Rate: {win_rate:.1f}% ({self.winning_trades}/{self.trade_count})\n"
-                f"📊 Open Positions: {len(positions)}\n"
-                f"⏰ Runtime: {runtime_hours:.1f}h",
-                critical=True
-            )
-        except Exception as e:
-            self.logger.warning(f"Shutdown notification failed: {e}")
+            self.telegram.send_message("🛑 BOT STOPPED", critical=True)
+        except Exception:
+            pass
         
         try:
             if hasattr(self, 'conn'):
@@ -1061,43 +841,26 @@ class SimpleTradingBot:
         except Exception:
             pass
         
-        self.logger.info("✅ Bot stopped successfully")
+        self.logger.info("✅ Bot stopped")
 
-# ====================== FLASK WEB APPLICATION ======================
+# ====================== FLASK APP ======================
 app = Flask(__name__)
 app.secret_key = Config.SECRET_KEY
 
-# Configure session
-app.config.update(
-    SESSION_COOKIE_SECURE=False,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(seconds=Config.SESSION_TIMEOUT)
-)
-
-@app.route('/ping', methods=['GET', 'HEAD'])
+@app.route('/ping')
 def ping():
-    """Health check for Render"""
     return 'pong', 200
-
-@app.route('/favicon.ico')
-def favicon():
-    return ('', 204)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page"""
     if request.method == 'POST':
         password = request.form.get('password', '').strip()
         if password == Config.WEB_UI_PASSWORD:
             session['authenticated'] = True
             session['login_time'] = time.time()
-            session.permanent = True
             return redirect(url_for('dashboard'))
         else:
-            time.sleep(2)
             return render_template_string(LOGIN_HTML, error="Invalid password")
-    
     return render_template_string(LOGIN_HTML)
 
 @app.route('/logout')
@@ -1105,45 +868,29 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# Simple HTML templates
+# Minimal templates
 LOGIN_HTML = """
 <!DOCTYPE html>
 <html>
-<head>
-    <title>OmegaX Bot v3.0 - Login</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .container { background: rgba(255,255,255,0.95); padding: 3rem; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); max-width: 400px; width: 90%; text-align: center; }
-        .logo { font-size: 3rem; margin-bottom: 1rem; background: linear-gradient(45deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: bold; }
-        .subtitle { color: #666; margin-bottom: 2rem; font-size: 1.1rem; }
-        .form-group { margin-bottom: 1.5rem; text-align: left; }
-        .form-group label { display: block; margin-bottom: 0.5rem; color: #333; font-weight: 500; }
-        .form-group input { width: 100%; padding: 1rem; border: 2px solid #e1e5e9; border-radius: 10px; font-size: 1rem; transition: all 0.3s ease; }
-        .form-group input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
-        .btn { width: 100%; padding: 1rem; background: linear-gradient(45deg, #667eea, #764ba2); color: white; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102,126,234,0.3); }
-        .error { background: #fee; color: #c33; padding: 1rem; border-radius: 10px; margin-bottom: 1rem; border: 1px solid #fcc; }
-        .version { margin-top: 2rem; font-size: 0.9rem; color: #888; }
-    </style>
-</head>
+<head><title>OmegaX Login</title>
+<style>
+body{font-family:Arial,sans-serif;background:#667eea;min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0}
+.container{background:#fff;padding:2rem;border-radius:10px;max-width:400px;width:90%;text-align:center}
+.logo{font-size:2rem;margin-bottom:1rem;color:#667eea}
+input{width:100%;padding:0.75rem;margin:0.5rem 0;border:1px solid #ddd;border-radius:5px}
+.btn{width:100%;padding:0.75rem;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer}
+.error{background:#fee;color:#c33;padding:0.75rem;margin:0.5rem 0;border-radius:5px}
+</style></head>
 <body>
-    <div class="container">
-        <div class="logo">🚀 OmegaX</div>
-        <div class="subtitle">Enhanced Trading Bot v3.0</div>
-        {% if error %}
-        <div class="error">{{ error }}</div>
-        {% endif %}
-        <form method="POST">
-            <div class="form-group">
-                <label for="password">Password:</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <button type="submit" class="btn">🔓 Access Dashboard</button>
-        </form>
-        <div class="version">Production Ready • 24h Position Limits</div>
-    </div>
+<div class="container">
+<div class="logo">🚀 OmegaX</div>
+<h2>Trading Bot v3.0</h2>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<form method="POST">
+<input type="password" name="password" placeholder="Password" required>
+<button type="submit" class="btn">Login</button>
+</form>
+</div>
 </body>
 </html>
 """
@@ -1151,198 +898,84 @@ LOGIN_HTML = """
 DASHBOARD_HTML = """
 <!DOCTYPE html>
 <html>
-<head>
-    <title>OmegaX Bot v3.0 - Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: #fff; min-height: 100vh; }
-        .header { background: rgba(0,0,0,0.2); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .logout-btn { background: #ef4444; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; text-decoration: none; font-size: 0.9rem; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-        .title { text-align: center; margin-bottom: 2rem; padding: 2rem; background: rgba(255,255,255,0.1); border-radius: 20px; }
-        .title h1 { font-size: 3rem; margin-bottom: 1rem; background: linear-gradient(45deg, #ffd700, #ffed4e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .status { display: inline-block; padding: 0.5rem 1rem; border-radius: 50px; font-weight: bold; margin-top: 1rem; }
-        .status-running { background: #10b981; }
-        .status-stopped { background: #ef4444; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .stat-card { background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 15px; }
-        .stat-card h3 { color: #ffd700; margin-bottom: 1rem; }
-        .stat-value { font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem; }
-        .positive { color: #4ade80; }
-        .negative { color: #f87171; }
-        .controls { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; justify-content: center; }
-        .btn { padding: 1rem 2rem; border: none; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: inline-block; color: white; }
-        .btn-primary { background: linear-gradient(45deg, #10b981, #059669); }
-        .btn-danger { background: linear-gradient(45deg, #ef4444, #dc2626); }
-        .btn-warning { background: linear-gradient(45deg, #f59e0b, #d97706); }
-        .btn-info { background: linear-gradient(45deg, #3b82f6, #2563eb); }
-        .btn:hover { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        .positions { background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 15px; }
-        .positions-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        .positions-table th, .positions-table td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .positions-table th { background: rgba(255,255,255,0.1); font-weight: bold; color: #ffd700; }
-        .action-btn { padding: 0.5rem 1rem; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
-        .footer { text-align: center; margin-top: 2rem; padding: 1rem; color: #94a3b8; font-size: 0.9rem; }
-        @media (max-width: 768px) {
-            .container { padding: 1rem; }
-            .title h1 { font-size: 2rem; }
-            .stats { grid-template-columns: 1fr; }
-            .controls { flex-direction: column; align-items: center; }
-            .btn { width: 100%; max-width: 300px; }
-        }
-    </style>
-    <script>
-        function closePosition(symbol) {
-            if (!confirm('Close position for ' + symbol + '?')) return;
-            fetch('/close_position', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({symbol: symbol})
-            }).then(response => response.json()).then(data => {
-                alert(data.success ? '✅ Position closed!' : '❌ Failed: ' + data.error);
-                location.reload();
-            });
-        }
-        
-        function closeAllPositions() {
-            if (!confirm('Close ALL positions?')) return;
-            fetch('/close_all_positions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            }).then(response => response.json()).then(data => {
-                alert(data.success ? '✅ Closed ' + data.closed_count + ' positions!' : '❌ Failed: ' + data.error);
-                location.reload();
-            });
-        }
-        
-        function toggleBot() {
-            var isRunning = {{ 'true' if bot_running else 'false' }};
-            var action = isRunning ? 'stop' : 'start';
-            if (!confirm((isRunning ? 'STOP' : 'START') + ' the bot?')) return;
-            fetch('/toggle_bot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({action: action})
-            }).then(response => response.json()).then(data => {
-                alert(data.success ? '✅ Bot ' + action + 'ed!' : '❌ Failed: ' + data.error);
-                location.reload();
-            });
-        }
-        
-        setTimeout(function() { location.reload(); }, 30000); // Auto-refresh every 30s
-    </script>
+<head><title>OmegaX Dashboard</title>
+<style>
+body{font-family:Arial,sans-serif;background:linear-gradient(135deg,#1e3c72,#2a5298);color:#fff;margin:0;min-height:100vh}
+.container{max-width:1200px;margin:0 auto;padding:2rem}
+.header{background:rgba(0,0,0,0.2);padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}
+.title{text-align:center;margin-bottom:2rem;padding:2rem;background:rgba(255,255,255,0.1);border-radius:10px}
+.title h1{font-size:2.5rem;margin-bottom:1rem;color:#ffd700}
+.status{display:inline-block;padding:0.5rem 1rem;border-radius:25px;font-weight:bold;margin-top:1rem}
+.status-running{background:#10b981}.status-stopped{background:#ef4444}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-bottom:2rem}
+.stat-card{background:rgba(255,255,255,0.1);padding:1.5rem;border-radius:10px}
+.stat-card h3{color:#ffd700;margin-bottom:0.5rem}
+.stat-value{font-size:1.8rem;font-weight:bold;margin-bottom:0.25rem}
+.positive{color:#4ade80}.negative{color:#f87171}
+.controls{display:flex;gap:1rem;margin-bottom:2rem;flex-wrap:wrap;justify-content:center}
+.btn{padding:0.75rem 1.5rem;border:none;border-radius:5px;cursor:pointer;text-decoration:none;color:#fff}
+.btn-primary{background:#10b981}.btn-danger{background:#ef4444}.btn-warning{background:#f59e0b}
+.positions{background:rgba(255,255,255,0.1);padding:1.5rem;border-radius:10px}
+.positions-table{width:100%;border-collapse:collapse;margin-top:1rem}
+.positions-table th,.positions-table td{padding:0.75rem;text-align:left;border-bottom:1px solid rgba(255,255,255,0.1)}
+.positions-table th{background:rgba(255,255,255,0.1);color:#ffd700}
+.action-btn{padding:0.5rem 1rem;background:#ef4444;color:#fff;border:none;border-radius:3px;cursor:pointer}
+.empty-state{text-align:center;padding:3rem;color:#94a3b8}
+.logout-btn{background:#ef4444;color:#fff;padding:0.5rem 1rem;text-decoration:none;border-radius:5px}
+</style>
+<script>
+function closePosition(symbol){if(!confirm('Close '+symbol+'?'))return;fetch('/close_position',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:symbol})}).then(r=>r.json()).then(d=>{alert(d.success?'✅ Closed!':'❌ Failed');location.reload()})}
+function closeAll(){if(!confirm('Close ALL?'))return;fetch('/close_all_positions',{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).then(d=>{alert(d.success?'✅ Closed '+d.closed_count:'❌ Failed');location.reload()})}
+function toggleBot(){var running={{ 'true' if bot_running else 'false' }};var action=running?'stop':'start';if(!confirm((running?'STOP':'START')+' bot?'))return;fetch('/toggle_bot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action})}).then(r=>r.json()).then(d=>{alert(d.success?'✅ Done!':'❌ Failed');location.reload()})}
+setTimeout(()=>location.reload(),30000);
+</script>
 </head>
 <body>
-    <div class="header">
-        <div>🔒 OmegaX Dashboard • Last Updated: {{ current_time }}</div>
-        <a href="/logout" class="logout-btn">🚪 Logout</a>
-    </div>
-
-    <div class="container">
-        <div class="title">
-            <h1>🚀 OmegaX Trading Bot</h1>
-            <div>Enhanced Institutional-Grade Crypto Futures Trading v3.0</div>
-            <div class="status {{ 'status-running' if bot_running else 'status-stopped' }}">
-                {{ '🟢 RUNNING' if bot_running else '🔴 STOPPED' }}
-            </div>
-        </div>
-
-        <div class="stats">
-            <div class="stat-card">
-                <h3>💰 Balance</h3>
-                <div class="stat-value">${{ "%.2f"|format(balance) }}</div>
-                <div>Initial: ${{ "%.2f"|format(initial_balance) }}</div>
-            </div>
-            
-            <div class="stat-card">
-                <h3>📈 Total P&L</h3>
-                <div class="stat-value {{ 'positive' if total_pnl >= 0 else 'negative' }}">
-                    ${{ "%.2f"|format(total_pnl) }}
-                </div>
-                <div>Return: {{ "%.2f"|format(total_return) }}%</div>
-            </div>
-            
-            <div class="stat-card">
-                <h3>🎯 Performance</h3>
-                <div class="stat-value">{{ "%.1f"|format(win_rate) }}%</div>
-                <div>{{ winning_trades }}/{{ trade_count }} trades</div>
-            </div>
-            
-            <div class="stat-card">
-                <h3>📊 Positions</h3>
-                <div class="stat-value">{{ positions|length }}/{{ max_positions }}</div>
-                <div>Max: {{ max_positions }} positions</div>
-            </div>
-        </div>
-
-        <div class="controls">
-            <button class="btn {{ 'btn-danger' if bot_running else 'btn-primary' }}" onclick="toggleBot()">
-                {{ '⏹️ Stop Bot' if bot_running else '▶️ Start Bot' }}
-            </button>
-            
-            {% if positions %}
-            <button class="btn btn-warning" onclick="closeAllPositions()">
-                🚫 Close All ({{ positions|length }})
-            </button>
-            {% endif %}
-            
-            <a href="/api/status" class="btn btn-info" target="_blank">📊 API Status</a>
-            <a href="javascript:location.reload()" class="btn btn-primary">🔄 Refresh</a>
-        </div>
-
-        <div class="positions">
-            <h2>📋 Open Positions (24h Auto-Close)</h2>
-            
-            {% if positions %}
-            <table class="positions-table">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th>Side</th>
-                        <th>Size</th>
-                        <th>Entry</th>
-                        <th>Current</th>
-                        <th>P&L</th>
-                        <th>P&L %</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for pos in positions %}
-                    <tr>
-                        <td><strong>{{ pos.symbol }}</strong></td>
-                        <td class="{{ 'positive' if pos.side == 'LONG' else 'negative' }}">{{ pos.side }}</td>
-                        <td>{{ "%.4f"|format(pos.size) }}</td>
-                        <td>${{ "%.4f"|format(pos.entry_price) }}</td>
-                        <td>${{ "%.4f"|format(pos.mark_price) }}</td>
-                        <td class="{{ 'positive' if pos.pnl >= 0 else 'negative' }}">
-                            ${{ "%.2f"|format(pos.pnl) }}
-                        </td>
-                        <td class="{{ 'positive' if pos.percentage >= 0 else 'negative' }}">
-                            {{ "%.2f"|format(pos.percentage) }}%
-                        </td>
-                        <td>
-                            <button class="action-btn" onclick="closePosition('{{ pos.symbol }}')">❌ Close</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div style="text-align: center; padding: 3rem;">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
-                <h3>No Open Positions</h3>
-                <p>Scanning {{ pairs_count }} crypto pairs for opportunities...</p>
-            </div>
-            {% endif %}
-        </div>
-
-        <div class="footer">
-            <div>🏛️ <strong>OmegaX v3.0</strong> • Production Ready • Real Market Data</div>
-            <div>Paper Trading • {{ pairs_count }} Pairs • 24h Position Limits</div>
-        </div>
-    </div>
+<div class="header">
+<div>🚀 OmegaX Dashboard</div>
+<a href="/logout" class="logout-btn">Logout</a>
+</div>
+<div class="container">
+<div class="title">
+<h1>🚀 OmegaX Bot</h1>
+<div>Crypto Trading v3.0</div>
+<div class="status {{ 'status-running' if bot_running else 'status-stopped' }}">
+{{ '🟢 RUNNING' if bot_running else '🔴 STOPPED' }}
+</div>
+</div>
+<div class="stats">
+<div class="stat-card"><h3>💰 Balance</h3><div class="stat-value">${{ "%.2f"|format(balance) }}</div></div>
+<div class="stat-card"><h3>📈 P&L</h3><div class="stat-value {{ 'positive' if total_pnl >= 0 else 'negative' }}">${{ "%.2f"|format(total_pnl) }}</div></div>
+<div class="stat-card"><h3>🎯 Win Rate</h3><div class="stat-value">{{ "%.1f"|format(win_rate) }}%</div></div>
+<div class="stat-card"><h3>📊 Positions</h3><div class="stat-value">{{ positions|length }}/{{ max_positions }}</div></div>
+</div>
+<div class="controls">
+<button class="btn {{ 'btn-danger' if bot_running else 'btn-primary' }}" onclick="toggleBot()">{{ '⏹️ Stop' if bot_running else '▶️ Start' }}</button>
+{% if positions %}<button class="btn btn-warning" onclick="closeAll()">🚫 Close All</button>{% endif %}
+<a href="javascript:location.reload()" class="btn btn-primary">🔄 Refresh</a>
+</div>
+<div class="positions">
+<h2>📋 Positions</h2>
+{% if positions %}
+<table class="positions-table">
+<tr><th>Symbol</th><th>Side</th><th>P&L</th><th>Action</th></tr>
+{% for pos in positions %}
+<tr>
+<td><strong>{{ pos.symbol }}</strong></td>
+<td class="{{ 'positive' if pos.side == 'LONG' else 'negative' }}">{{ pos.side }}</td>
+<td class="{{ 'positive' if pos.pnl >= 0 else 'negative' }}">${{ "%.2f"|format(pos.pnl) }}</td>
+<td><button class="action-btn" onclick="closePosition('{{ pos.symbol }}')">❌</button></td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<div class="empty-state">
+<h3>🔍 No Positions</h3>
+<p>Scanning {{ pairs_count }} pairs...</p>
+</div>
+{% endif %}
+</div>
+</div>
 </body>
 </html>
 """
@@ -1350,211 +983,99 @@ DASHBOARD_HTML = """
 @app.route('/')
 @require_auth
 def dashboard():
-    """Main dashboard"""
-    global bot_instance
-    
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
-    
-    if not bot_instance:
-        return render_template_string(DASHBOARD_HTML,
-            balance=float(Config.INITIAL_BALANCE),
-            initial_balance=float(Config.INITIAL_BALANCE),
-            total_pnl=0.0, total_return=0.0, positions=[], bot_running=False,
-            uptime=0.0, win_rate=0.0, winning_trades=0, trade_count=0,
-            max_positions=Config.MAX_POSITIONS, pairs_count=len(Config.TRADING_PAIRS),
-            current_time=current_time)
-    
-    try:
-        balance = float(bot_instance.get_balance())
-        positions = bot_instance.get_positions()
-        total_unrealized_pnl = sum(pos.get('pnl', 0) for pos in positions)
-        total_pnl = float(bot_instance.total_pnl) + total_unrealized_pnl
-        total_return = ((balance - float(Config.INITIAL_BALANCE)) / float(Config.INITIAL_BALANCE)) * 100
-        uptime = (time.time() - bot_instance.start_time) / 3600
-        win_rate = (bot_instance.winning_trades / bot_instance.trade_count * 100) if bot_instance.trade_count > 0 else 0
-        
-        return render_template_string(DASHBOARD_HTML,
-            balance=balance, initial_balance=float(Config.INITIAL_BALANCE),
-            total_pnl=total_pnl, total_return=total_return, positions=positions,
-            bot_running=bot_instance.running, uptime=uptime, win_rate=win_rate,
-            winning_trades=bot_instance.winning_trades, trade_count=bot_instance.trade_count,
-            max_positions=Config.MAX_POSITIONS, pairs_count=len(Config.TRADING_PAIRS),
-            current_time=current_time)
-            
-    except Exception as e:
-        return f"Dashboard Error: {e}", 500
-
-@app.route('/api/status')
-@require_auth
-def api_status():
-    """API status endpoint"""
     global bot_instance
     
     if not bot_instance:
-        return jsonify({'status': 'error', 'message': 'Bot not initialized'})
+        return render_template_string(DASHBOARD_HTML,
+            balance=float(Config.INITIAL_BALANCE), total_pnl=0.0, positions=[], 
+            bot_running=False, win_rate=0.0, max_positions=Config.MAX_POSITIONS,
+            pairs_count=len(Config.TRADING_PAIRS))
     
     try:
         balance = float(bot_instance.get_balance())
         positions = bot_instance.get_positions()
         total_pnl = float(bot_instance.total_pnl) + sum(pos.get('pnl', 0) for pos in positions)
-        uptime = (time.time() - bot_instance.start_time) / 3600
         win_rate = (bot_instance.winning_trades / bot_instance.trade_count * 100) if bot_instance.trade_count > 0 else 0
         
-        return jsonify({
-            'status': 'healthy',
-            'service': 'OmegaX Enhanced Trading Bot v3.0',
-            'timestamp': time.time(),
-            'bot_running': bot_instance.running,
-            'balance': balance,
-            'total_pnl': total_pnl,
-            'positions_count': len(positions),
-            'uptime_hours': uptime,
-            'win_rate': win_rate,
-            'total_trades': bot_instance.trade_count,
-            'winning_trades': bot_instance.winning_trades,
-            'total_volume': float(bot_instance.total_volume),
-            'consecutive_failures': bot_instance.consecutive_failures,
-            'error_count': bot_instance.error_count,
-            'configuration': {
-                'leverage': Config.LEVERAGE,
-                'max_positions': Config.MAX_POSITIONS,
-                'position_time_limit_hours': Config.POSITION_TIME_LIMIT / 3600,
-                'trading_pairs': len(Config.TRADING_PAIRS),
-                'signal_threshold': float(Config.SIGNAL_THRESHOLD)
-            }
-        })
+        return render_template_string(DASHBOARD_HTML,
+            balance=balance, total_pnl=total_pnl, positions=positions,
+            bot_running=bot_instance.running, win_rate=win_rate,
+            max_positions=Config.MAX_POSITIONS, pairs_count=len(Config.TRADING_PAIRS))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return f"Error: {e}", 500
 
 @app.route('/close_position', methods=['POST'])
 @require_auth
 def close_position():
-    """Close individual position"""
     global bot_instance
-    
     if not bot_instance:
         return jsonify({'success': False, 'error': 'Bot not initialized'})
     
     try:
         data = request.get_json()
         symbol = str(data['symbol']).upper().strip()
-        
-        if not validate_symbol(symbol):
-            return jsonify({'success': False, 'error': 'Invalid symbol'})
-        
-        success = bot_instance.close_position(symbol, "Manual Web Close")
-        return jsonify({'success': success, 'message': f'Position {symbol} closed'})
-        
+        success = bot_instance.close_position(symbol, "Manual")
+        return jsonify({'success': success})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/close_all_positions', methods=['POST'])
 @require_auth
 def close_all_positions():
-    """Close all positions"""
     global bot_instance
-    
     if not bot_instance:
-        return jsonify({'success': False, 'error': 'Bot not initialized'})
+        return jsonify({'success': False})
     
     try:
         closed_count = bot_instance.close_all_positions()
         return jsonify({'success': True, 'closed_count': closed_count})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+    except Exception:
+        return jsonify({'success': False})
 
 @app.route('/toggle_bot', methods=['POST'])
 @require_auth
 def toggle_bot():
-    """Start/stop bot"""
     global bot_instance
-    
     if not bot_instance:
-        return jsonify({'success': False, 'error': 'Bot not initialized'})
+        return jsonify({'success': False})
     
     try:
         data = request.get_json()
-        action = str(data['action']).lower().strip()
+        action = str(data['action']).lower()
         
         if action == 'start':
             bot_instance.start_bot()
-            return jsonify({'success': True, 'message': 'Bot started'})
         elif action == 'stop':
             bot_instance.stop_bot()
-            return jsonify({'success': True, 'message': 'Bot stopped'})
-        else:
-            return jsonify({'success': False, 'error': 'Invalid action'})
-            
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        
+        return jsonify({'success': True})
+    except Exception:
+        return jsonify({'success': False})
 
-# ====================== MAIN ENTRY POINT ======================
+# ====================== MAIN ======================
 def main():
-    """Main entry point optimized for Render"""
     global bot_instance
     
     try:
-        # Get port from environment (Render sets this)
         port = int(os.environ.get('PORT', 8080))
-        
-        # Setup logging
         setup_logging()
         logger = logging.getLogger(__name__)
         
-        # Startup banner
-        logger.info("=" * 60)
-        logger.info("🚀 OmegaX Enhanced Trading Bot v3.0 - Render Deployment")
-        logger.info("=" * 60)
-        logger.info("✅ Production Ready")
-        logger.info("✅ 24-Hour Position Limits")
-        logger.info("✅ Real-time Market Data")
-        logger.info("✅ Paper Trading Mode")
-        logger.info("=" * 60)
+        logger.info("🚀 OmegaX Bot v3.0 - Render Free Tier")
+        logger.info(f"Pairs: {len(Config.TRADING_PAIRS)}")
         
-        # Configuration summary
-        logger.info("📊 CONFIGURATION:")
-        logger.info(f"   💰 Balance: ${float(Config.INITIAL_BALANCE):,.2f}")
-        logger.info(f"   ⚡ Leverage: {Config.LEVERAGE}x")
-        logger.info(f"   🎯 Max Positions: {Config.MAX_POSITIONS}")
-        logger.info(f"   📈 Risk/Trade: {float(Config.BASE_RISK_PERCENT)}%")
-        logger.info(f"   📊 Trading Pairs: {len(Config.TRADING_PAIRS)}")
-        logger.info(f"   🔒 Web Password: {'Set' if Config.WEB_UI_PASSWORD != 'omegax2024!' else 'Default'}")
-        logger.info(f"   📱 Telegram: {'Enabled' if Config.TELEGRAM_TOKEN else 'Disabled'}")
-        
-        # Initialize bot
-        logger.info("🔧 Initializing trading bot...")
-        bot_instance = SimpleTradingBot()
-        
-        # Start bot
-        logger.info("▶️ Starting trading bot...")
+        bot_instance = MinimalTradingBot()
         bot_instance.start_bot()
         
-        # Web server info
-        logger.info("🌐 Starting web server...")
-        logger.info(f"🔗 Dashboard: https://your-app.onrender.com")
-        logger.info(f"📊 API Status: https://your-app.onrender.com/api/status")
-        
-        logger.info("=" * 60)
-        logger.info("🚀 Bot is FULLY OPERATIONAL!")
-        logger.info("=" * 60)
-        
-        # Run Flask app (Render handles the WSGI server)
-        app.run(
-            host='0.0.0.0',
-            port=port,
-            debug=False,
-            threaded=True,
-            use_reloader=False
-        )
+        logger.info(f"Starting on port {port}")
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
         
     except Exception as e:
-        logger.error(f"💥 Startup failed: {e}")
-        logger.error(traceback.format_exc())
+        print(f"Startup failed: {e}")
         sys.exit(1)
     finally:
         if bot_instance:
             bot_instance.stop_bot()
-        logger.info("✅ Shutdown complete")
 
 if __name__ == "__main__":
     main()
