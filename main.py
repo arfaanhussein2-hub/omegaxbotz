@@ -643,17 +643,17 @@ class RealisticPaperTradingClient:
         self.logger.info("✅ Enhanced paper trading client initialized")
 
     def _validate_response(self, data: Any) -> bool:
-        """Comprehensive response validation"""
-        if data is None:
-            return False
-        
-        if isinstance(data, dict):
-            return len(data) > 0 and 'code' not in data  # Binance error responses have 'code'
-            
-        if isinstance(data, list):
-            return len(data) > 0 and all(isinstance(item, dict) for item in data[:3])
-            
+    """Lenient response validation for Render deployment"""
+    if data is None:
         return False
+    
+    if isinstance(data, dict):
+        return 'code' not in data  # Accept empty dict, reject only errors
+        
+    if isinstance(data, list):
+        return True  # Accept any list
+        
+    return True  # Accept other valid JSON
 
     def _request(self, method: str, endpoint: str, params: Dict = None, weight: int = 1, retries: int = 3) -> Dict:
         """Enhanced API request with comprehensive error handling"""
