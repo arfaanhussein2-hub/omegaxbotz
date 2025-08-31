@@ -1,0 +1,16 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[environment]
+PYTHONUNBUFFERED = "1"
+PYTHONPATH = "."
+PORT = "8080"
+
+[healthcheck]
+path = "/api/status"
+timeout = 300
+interval = 30
