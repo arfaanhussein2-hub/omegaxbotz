@@ -1,25 +1,16 @@
-# Core Framework
-Flask==2.3.3
-APScheduler==3.10.4
-Werkzeug==2.3.7
+pydantic==1.10.15
+python-dotenv==1.0.1
 
-# API and Networking
-requests==2.31.0
-urllib3==2.0.7
+cryptography==42.0.8
+structlog==24.1.0
+quart==0.19.6
+hypercorn==0.14.3
+prometheus-client==0.20.0
+aiosqlite==0.20.0
+aiohttp==3.9.5
+numpy==1.26.4
+pandas==2.2.2
+psutil==5.9.8
 
-# Mathematical and Scientific Computing (Lightweight versions)
-numpy==1.24.4
-scipy==1.11.4
-pandas==2.0.3
-
-# Environment and Configuration
-python-dotenv==1.0.0
-
-# Additional utilities for institutional algorithms
-statistics==1.0.3.5
-
-# Optional: Faster JSON processing
-ujson==5.8.0
-
-# Memory optimization
-psutil==5.9.6
+# Optional: faster event loop on Linux
+uvloop==0.19.0; platform_system != "Windows"
